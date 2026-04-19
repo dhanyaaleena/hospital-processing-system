@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hospital Bulk Processor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f4f6f9;
+      color: #1a1a2e;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }
+    p.subtitle { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; color: #333; }
+
+    .tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 2px solid #e2e8f0; }
+    .tab {
+      padding: 0.6rem 1.4rem;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #94a3b8;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: #475569; }
+    .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 1rem;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: #2563eb; background: #eff6ff; }
+    .drop-zone input[type=file] { display: none; }
+    .drop-zone .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .drop-zone p { color: #666; font-size: 0.9rem; }
+    .drop-zone .filename { margin-top: 0.5rem; font-weight: 600; color: #2563eb; font-size: 0.9rem; }
+
+    /* Buttons */
+    button.primary {
+      background: #2563eb; color: #fff; border: none;
+      border-radius: 6px; padding: 0.6rem 1.4rem;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background 0.15s;
+    }
+    button.primary:hover { background: #1d4ed8; }
+    button.primary:disabled { background: #93c5fd; cursor: not-allowed; }
+    button.secondary {
+      background: #f1f5f9; color: #333; border: 1px solid #ddd;
+      border-radius: 6px; padding: 0.6rem 1.2rem;
+      font-size: 0.875rem; font-weight: 500; cursor: pointer;
+    }
+    button.secondary:hover { background: #e2e8f0; }
+    .btn-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+
+    /* Progress */
+    .progress-wrap { margin: 1.25rem 0; }
+    .progress-label { font-size: 0.8rem; color: #555; margin-bottom: 0.4rem; display: flex; justify-content: space-between; }
+    .progress-bar { height: 10px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+    .progress-fill {
+      height: 100%; background: #2563eb; border-radius: 99px;
+      width: 0%; transition: width 0.4s ease;
+    }
+    .progress-fill.done { background: #16a34a; }
+    .progress-fill.error { background: #dc2626; }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }
+    .badge.completed  { background: #dcfce7; color: #16a34a; }
+    .badge.partial    { background: #fef9c3; color: #ca8a04; }
+    .badge.failed     { background: #fee2e2; color: #dc2626; }
+    .badge.processing { background: #dbeafe; color: #2563eb; }
+    .badge.pending    { background: #f1f5f9; color: #64748b; }
+
+    /* Stats */
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+    .stat-box { background: #f8fafc; border-radius: 8px; padding: 0.75rem 1rem; }
+    .stat-box .label { font-size: 0.75rem; color: #666; }
+    .stat-box .value { font-size: 1.4rem; font-weight: 700; color: #1a1a2e; }
+    .stat-box.green .value { color: #16a34a; }
+    .stat-box.red .value   { color: #dc2626; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; margin-top: 1rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { background: #f8fafc; text-align: left; padding: 0.6rem 0.8rem; color: #555; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+    td { padding: 0.55rem 0.8rem; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr.row-ok  td:nth-child(3) { color: #16a34a; font-weight: 600; }
+    tr.row-err td:nth-child(3) { color: #dc2626; font-weight: 600; }
+    tr.row-pending td { color: #94a3b8; }
+
+    /* Input row */
+    .input-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .input-row input {
+      flex: 1; border: 1px solid #ddd; border-radius: 6px;
+      padding: 0.55rem 0.8rem; font-size: 0.875rem; outline: none;
+    }
+    .input-row input:focus { border-color: #2563eb; }
+
+    /* WS log */
+    .log {
+      background: #0f172a; color: #94a3b8; border-radius: 8px;
+      padding: 1rem; font-family: monospace; font-size: 0.8rem;
+      max-height: 220px; overflow-y: auto; white-space: pre-wrap; line-height: 1.6;
+    }
+    .log .ev-progress  { color: #60a5fa; }
+    .log .ev-completed { color: #4ade80; }
+    .log .ev-error     { color: #f87171; }
+    .log .ev-state     { color: #facc15; }
+    .log .ev-started   { color: #c084fc; }
+
+    /* Alert */
+    .alert { padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; display: none; white-space: pre-wrap; }
+    .alert.error { background: #fee2e2; color: #dc2626; }
+    .alert.info  { background: #dbeafe; color: #1d4ed8; }
+
+    /* Step indicator */
+    .steps { display: flex; align-items: center; gap: 0; }
+    .step { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; min-width: 100px; }
+    .step-dot {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #e2e8f0; border: 2px solid #cbd5e1;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700; color: #94a3b8;
+      transition: all 0.3s;
+    }
+    .step-label { font-size: 0.75rem; color: #94a3b8; font-weight: 500; text-align: center; transition: color 0.3s; }
+    .step-line { flex: 1; height: 2px; background: #e2e8f0; transition: background 0.3s; min-width: 40px; }
+
+    .step.active   .step-dot { background: #dbeafe; border-color: #2563eb; color: #2563eb; }
+    .step.active   .step-label { color: #2563eb; }
+    .step.done     .step-dot { background: #dcfce7; border-color: #16a34a; color: #16a34a; }
+    .step.done     .step-label { color: #16a34a; }
+    .step.error    .step-dot { background: #fee2e2; border-color: #dc2626; color: #dc2626; }
+    .step.error    .step-label { color: #dc2626; }
+    .step-line.done { background: #16a34a; }
+
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%       { transform: scale(1.15); opacity: 0.7; }
+    }
+    .step.active .step-dot { animation: pulse-dot 1s ease-in-out infinite; }
+
+    /* Live section divider */
+    .section-label { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; margin: 1.25rem 0 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Hospital Bulk Processor</h1>
+  <p class="subtitle">Upload a CSV to batch-create hospitals via the Hospital Directory API</p>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="upload" onclick="switchTab(this,'upload')">New Batch</button>
+    <button class="tab"        data-tab="status"  onclick="switchTab(this,'status')">Batch History</button>
+  </div>
+
+  <!-- ── UPLOAD TAB ── -->
+  <div id="tab-upload" class="tab-panel active">
+
+    <!-- Step 1: pick file -->
+    <div class="card" id="uploadCard">
+      <h2>Upload a CSV to start processing</h2>
+
+      <!-- hidden file input -->
+      <input type="file" id="csvFile" accept=".csv" style="display:none" onchange="onFileChosen(this)" />
+
+      <!-- drop zone (drag & drop only — no click handler to avoid conflicts) -->
+      <div class="drop-zone" id="dropZone">
+        <div class="icon">📂</div>
+        <p>Drag & drop a CSV file here, or</p>
+        <button class="primary" style="margin-top:0.75rem" onclick="event.stopPropagation(); document.getElementById('csvFile').click()">
+          Choose CSV file
+        </button>
+        <div class="filename" id="uploadFilename" style="margin-top:0.5rem"></div>
+      </div>
+
+      <div class="alert error" id="uploadAlert"></div>
+
+      <!-- dev only: simulate failures -->
+      <details style="margin-bottom:0.75rem">
+        <summary style="font-size:0.8rem;color:#94a3b8;cursor:pointer;user-select:none">Testing options</summary>
+        <div style="margin-top:0.5rem">
+          <label style="font-size:0.8rem;color:#666;display:block;margin-bottom:0.3rem">
+            Simulate failures on rows (comma-separated, e.g. <code>2,5</code>)
+          </label>
+          <input type="text" id="failRows" placeholder="e.g. 2,5" style="border:1px solid #ddd;border-radius:6px;padding:0.45rem 0.7rem;font-size:0.875rem;width:200px;outline:none" />
+        </div>
+      </details>
+
+      <!-- Step indicator (hidden until submit) -->
+      <div id="stepIndicator" style="display:none;margin-top:1.25rem">
+        <div class="steps">
+          <div class="step" id="step-validate">
+            <div class="step-dot"></div>
+            <div class="step-label">Validating CSV</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" id="step-submit">
+            <div class="step-dot"></div>
+            <div class="step-label">Submitting batch</div>
+          </div>
+          <div class="step-line"></div>
+          <div class="step" id="step-process">
+            <div class="step-dot"></div>
+            <div class="step-label">Processing hospitals</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2 (shown while processing): live progress -->
+    <div class="card" id="liveCard" style="display:none">
+      <h2>Processing <span class="badge processing" id="liveBadge">processing</span></h2>
+      <div class="section-label">Progress</div>
+      <div class="progress-wrap">
+        <div class="progress-label">
+          <span id="liveProgressText">Starting…</span>
+          <span id="liveProgressPct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="liveProgressFill"></div></div>
+      </div>
+      <div class="section-label">Event stream</div>
+      <div class="log" id="liveLog">—</div>
+    </div>
+
+    <!-- Step 3 (shown after done): results -->
+    <div class="card" id="resultCard" style="display:none">
+      <h2>Result <span class="badge" id="resultBadge"></span></h2>
+      <div class="summary-grid" id="summaryGrid"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Name</th><th>Status</th><th>Hospital ID</th><th>Error</th></tr></thead>
+          <tbody id="resultBody"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:1rem;display:flex;gap:0.75rem;flex-wrap:wrap">
+        <button class="secondary" onclick="resetUpload()">Upload another CSV</button>
+        <button class="secondary" id="resumeBtn" style="color:#dc2626;display:none" onclick="resumeFromResult()">↻ Resume failed hospitals</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── STATUS TAB ── -->
+  <div id="tab-status" class="tab-panel">
+    <div class="card">
+      <h2>All Batches</h2>
+      <div id="batchListEmpty" style="color:#94a3b8;font-size:0.875rem">No batches processed yet.</div>
+      <div class="table-wrap" id="batchListWrap" style="display:none">
+        <table id="batchListTable">
+          <thead>
+            <tr>
+              <th>Batch ID</th>
+              <th>Status</th>
+              <th>Total</th>
+              <th>Processed</th>
+              <th>Failed</th>
+              <th>Activated</th>
+              <th>Time (s)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="batchListBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="statusCard" style="display:none">
+      <h2>Batch detail <span class="badge" id="statusBadge"></span></h2>
+      <div style="margin-bottom:0.75rem">
+        <code id="statusBatchId" style="font-size:0.8rem;color:#555;word-break:break-all"></code>
+      </div>
+      <div class="alert error" id="statusAlert"></div>
+      <div class="summary-grid" id="statusGrid"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Name</th><th>Status</th><th>Hospital ID</th><th>Error</th></tr></thead>
+          <tbody id="statusBody"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:1rem;display:flex;gap:0.5rem">
+        <button class="secondary" onclick="refreshSelected()">↻ Refresh</button>
+        <button class="secondary" style="color:#dc2626" onclick="resumeBatch()">Resume failed</button>
+        <button class="secondary" onclick="document.getElementById('statusCard').style.display='none'">✕ Close</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const BASE = window.location.origin;
+  let uploadFile = null, wsSocket = null;
+
+  // ── Tabs ──
+  function switchTab(btn, name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+    if (name === 'status') loadBatchList();
+  }
+
+  // ── Drag & drop on upload zone ──
+  const dz = document.getElementById('dropZone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f) setUploadFile(f);
+  });
+
+  function onFileChosen(input) { if (input.files[0]) setUploadFile(input.files[0]); }
+  function setUploadFile(f) {
+    uploadFile = f;
+    document.getElementById('uploadFilename').textContent = f.name;
+    submitUpload();
+  }
+
+  // ── Step indicator ──
+  const STEPS = ['validate', 'submit', 'process'];
+  const STEP_ICONS = { default: '●', active: '●', done: '✓', error: '✗' };
+
+  function setStep(name, state) {
+    const el = document.getElementById('step-' + name);
+    el.className = 'step ' + state;
+    el.querySelector('.step-dot').textContent =
+      state === 'done' ? '✓' : state === 'error' ? '✗' : '●';
+    // colour the connecting line after this step if done
+    const idx = STEPS.indexOf(name);
+    const lines = document.querySelectorAll('.step-line');
+    if (lines[idx]) lines[idx].className = 'step-line' + (state === 'done' ? ' done' : '');
+  }
+
+  function showSteps() {
+    document.getElementById('stepIndicator').style.display = 'block';
+    STEPS.forEach(s => setStep(s, ''));
+  }
+
+  function hideSteps() {
+    document.getElementById('stepIndicator').style.display = 'none';
+  }
+
+  // ── Upload & stream ──
+  async function submitUpload() {
+    if (!uploadFile) return;
+    showAlert('uploadAlert', '', false);
+
+    showSteps();
+
+    // Step 1: validating
+    setStep('validate', 'active');
+
+    const fd = new FormData();
+    fd.append('file', uploadFile);
+
+    const failRows = document.getElementById('failRows').value.trim();
+    const url = failRows
+      ? `${BASE}/hospitals/bulk?simulate_fail_rows=${encodeURIComponent(failRows)}`
+      : `${BASE}/hospitals/bulk`;
+
+    let batchId;
+    try {
+      // Step 2: submitting (server validates then kicks off batch)
+      setStep('submit', 'active');
+      const res = await fetch(url, { method: 'POST', body: fd });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setStep('validate', 'error');
+        setStep('submit', 'error');
+        const msg = Array.isArray(data.detail)
+          ? 'CSV validation failed:\n' + data.detail.map(e => `  • Row ${e.row}: ${e.error}`).join('\n')
+          : (data.detail || 'Unknown error');
+        showAlert('uploadAlert', msg, true);
+        return;
+      }
+
+      setStep('validate', 'done');
+      setStep('submit', 'done');
+      batchId = data.batch_id;
+    } catch (e) {
+      setStep('validate', 'error');
+      setStep('submit', 'error');
+      showAlert('uploadAlert', 'Network error: ' + e.message, true);
+      return;
+    }
+
+    // Step 3: processing hospitals via WebSocket
+    setStep('process', 'active');
+
+    // Show live card after a brief moment so user sees the steps complete
+    setTimeout(() => {
+      document.getElementById('uploadCard').style.display = 'none';
+      document.getElementById('liveCard').style.display = 'block';
+      document.getElementById('resultCard').style.display = 'none';
+      clearLog();
+      // Seed the log with what already happened before WS connected
+      logEvent(`CSV validated successfully — ${uploadFile.name}`, 'ev-state');
+      logEvent(`Batch submitted — ID: ${batchId}`, 'ev-state');
+      logEvent('Connecting to live event stream…', 'ev-started');
+      connectLiveWS(batchId);
+    }, 600);
+  }
+
+  function connectLiveWS(batchId) {
+    if (wsSocket) { wsSocket.close(); wsSocket = null; }
+
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    wsSocket = new WebSocket(`${proto}://${location.host}/hospitals/bulk/${batchId}/ws`);
+
+    wsSocket.onopen = () => logEvent(`connected — batch ${batchId}`, 'ev-started');
+
+    wsSocket.onmessage = e => {
+      const msg = JSON.parse(e.data);
+
+      if (msg.event === 'state') {
+        logEvent(JSON.stringify(msg), 'ev-state');
+        updateProgress(msg.processed, msg.total, `${msg.processed}/${msg.total} processed`);
+      }
+
+      if (msg.event === 'started') {
+        logEvent('Batch processing started', 'ev-started');
+      }
+
+      if (msg.event === 'progress') {
+        const label = `Row ${msg.row} — ${msg.processed + msg.failed}/${msg.total} done`;
+        updateProgress(msg.processed + msg.failed, msg.total, label);
+        logEvent(
+          `row ${msg.row}: ${msg.hospital_status}  (processed: ${msg.processed}, failed: ${msg.failed})`,
+          'ev-progress'
+        );
+      }
+
+      if (msg.event === 'completed') {
+        updateProgress(msg.processed + msg.failed, msg.processed + msg.failed, 'Done — ' + msg.status, msg.status);
+        logEvent(`completed — status: ${msg.status}, activated: ${msg.batch_activated}`, 'ev-completed');
+        wsSocket.close();
+        setStep('process', msg.status === 'failed' ? 'error' : 'done');
+        fetchAndRenderResult(batchId, msg.status);
+      }
+    };
+
+    wsSocket.onerror = () => logEvent('WebSocket error', 'ev-error');
+    wsSocket.onclose = () => logEvent('connection closed', 'ev-error');
+  }
+
+  async function fetchAndRenderResult(batchId, status) {
+    try {
+      const res = await fetch(`${BASE}/hospitals/bulk/${batchId}/status`);
+      const data = await res.json();
+      showResults(data);
+    } catch {
+      // fallback: just show what we know
+      showResults({ batch_id: batchId, status, total_hospitals: '?', processed_hospitals: '?', failed_hospitals: '?', batch_activated: false, processing_time_seconds: null, hospitals: [] });
+    }
+  }
+
+  function showResults(data) {
+    document.getElementById('liveCard').style.display = 'none';
+    document.getElementById('resultCard').style.display = 'block';
+
+    const badge = document.getElementById('resultBadge');
+    badge.textContent = data.status;
+    badge.className = 'badge ' + data.status;
+
+    const g = document.getElementById('summaryGrid');
+    g.innerHTML = `
+      <div class="stat-box"><div class="label">Total</div><div class="value">${data.total_hospitals}</div></div>
+      <div class="stat-box green"><div class="label">Processed</div><div class="value">${data.processed_hospitals}</div></div>
+      <div class="stat-box red"><div class="label">Failed</div><div class="value">${data.failed_hospitals}</div></div>
+      <div class="stat-box"><div class="label">Activated</div><div class="value">${data.batch_activated ? '✓' : '✗'}</div></div>
+      <div class="stat-box"><div class="label">Time (s)</div><div class="value">${data.processing_time_seconds ?? '—'}</div></div>
+      <div class="stat-box"><div class="label">Batch ID</div><div class="value" style="font-size:0.6rem;word-break:break-all;color:#555">${data.batch_id}</div></div>
+    `;
+
+    const tb = document.getElementById('resultBody');
+    tb.innerHTML = data.hospitals.map(h => {
+      const cls = h.status.includes('created') ? 'row-ok' : h.status === 'failed' ? 'row-err' : 'row-pending';
+      return `<tr class="${cls}">
+        <td>${h.row}</td>
+        <td>${esc(h.name)}</td>
+        <td>${h.status}</td>
+        <td>${h.hospital_id ?? '—'}</td>
+        <td style="font-size:0.8rem;color:#dc2626">${esc(h.error || '')}</td>
+      </tr>`;
+    }).join('');
+
+    // Show resume button if there are failures
+    const resumeBtn = document.getElementById('resumeBtn');
+    resumeBtn.style.display = data.failed_hospitals > 0 ? 'inline-block' : 'none';
+    resumeBtn.dataset.batchId = data.batch_id;
+
+    loadBatchList();
+  }
+
+  function updateProgress(done, total, label, finalStatus) {
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const fill = document.getElementById('liveProgressFill');
+    fill.style.width = pct + '%';
+    fill.className = 'progress-fill' + (finalStatus === 'completed' ? ' done' : finalStatus === 'failed' ? ' error' : '');
+    document.getElementById('liveProgressPct').textContent = pct + '%';
+    document.getElementById('liveProgressText').textContent = label;
+
+    if (finalStatus) {
+      const badge = document.getElementById('liveBadge');
+      badge.textContent = finalStatus;
+      badge.className = 'badge ' + finalStatus;
+    }
+  }
+
+  function clearLog() {
+    document.getElementById('liveLog').innerHTML = '';
+  }
+
+  function logEvent(text, cls) {
+    const log = document.getElementById('liveLog');
+    const line = document.createElement('span');
+    if (cls) line.className = cls;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${text}\n`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function resetUpload() {
+    uploadFile = null;
+    if (wsSocket) { wsSocket.close(); wsSocket = null; }
+    document.getElementById('uploadFilename').textContent = '';
+    document.getElementById('uploadCard').style.display = 'block';
+    document.getElementById('liveCard').style.display = 'none';
+    document.getElementById('resultCard').style.display = 'none';
+    showAlert('uploadAlert', '', false);
+    hideSteps();
+    document.getElementById('csvFile').value = '';
+    document.getElementById('failRows').value = '';
+  }
+
+  // ── Status tab ──
+  let selectedBatchId = null;
+
+  async function loadBatchList() {
+    try {
+      const res = await fetch(`${BASE}/hospitals/bulk`);
+      const batches = await res.json();
+      renderBatchList(batches);
+    } catch (e) { /* silently ignore if server not ready */ }
+  }
+
+  function renderBatchList(batches) {
+    const empty = document.getElementById('batchListEmpty');
+    const wrap  = document.getElementById('batchListWrap');
+    if (!batches.length) { empty.style.display = 'block'; wrap.style.display = 'none'; return; }
+    empty.style.display = 'none';
+    wrap.style.display = 'block';
+
+    document.getElementById('batchListBody').innerHTML = batches.map(b => `
+      <tr>
+        <td style="font-family:monospace;font-size:0.75rem;color:#555">${b.batch_id}</td>
+        <td><span class="badge ${b.status}">${b.status}</span></td>
+        <td>${b.total_hospitals}</td>
+        <td style="color:#16a34a;font-weight:600">${b.processed_hospitals}</td>
+        <td style="color:${b.failed_hospitals > 0 ? '#dc2626' : 'inherit'};font-weight:${b.failed_hospitals > 0 ? '600' : '400'}">${b.failed_hospitals}</td>
+        <td>${b.batch_activated ? '✓' : '✗'}</td>
+        <td>${b.processing_time_seconds ?? '—'}</td>
+        <td><button class="secondary" style="padding:0.3rem 0.8rem;font-size:0.8rem" onclick="checkStatus('${b.batch_id}')">Details</button></td>
+      </tr>`).join('');
+  }
+
+  async function checkStatus(batchId) {
+    selectedBatchId = batchId;
+    showAlert('statusAlert', '', false);
+    try {
+      const res = await fetch(`${BASE}/hospitals/bulk/${batchId}/status`);
+      const data = await res.json();
+      if (!res.ok) { showAlert('statusAlert', data.detail || 'Error', true); return; }
+      renderStatusCard(data);
+    } catch (e) { showAlert('statusAlert', 'Network error: ' + e.message, true); }
+  }
+
+  function renderStatusCard(data) {
+    document.getElementById('statusCard').style.display = 'block';
+    document.getElementById('statusBatchId').textContent = data.batch_id;
+    const badge = document.getElementById('statusBadge');
+    badge.textContent = data.status; badge.className = 'badge ' + data.status;
+
+    document.getElementById('statusGrid').innerHTML = `
+      <div class="stat-box"><div class="label">Total</div><div class="value">${data.total_hospitals}</div></div>
+      <div class="stat-box green"><div class="label">Processed</div><div class="value">${data.processed_hospitals}</div></div>
+      <div class="stat-box red"><div class="label">Failed</div><div class="value">${data.failed_hospitals}</div></div>
+      <div class="stat-box"><div class="label">Activated</div><div class="value">${data.batch_activated ? '✓' : '✗'}</div></div>
+      <div class="stat-box"><div class="label">Time (s)</div><div class="value">${data.processing_time_seconds ?? '—'}</div></div>
+    `;
+    document.getElementById('statusBody').innerHTML = data.hospitals.map(h => {
+      const cls = h.status.includes('created') ? 'row-ok' : h.status === 'failed' ? 'row-err' : 'row-pending';
+      return `<tr class="${cls}"><td>${h.row}</td><td>${esc(h.name)}</td><td>${h.status}</td><td>${h.hospital_id ?? '—'}</td><td style="font-size:0.8rem;color:#dc2626">${esc(h.error||'')}</td></tr>`;
+    }).join('');
+  }
+
+  async function refreshSelected() {
+    if (selectedBatchId) await checkStatus(selectedBatchId);
+  }
+
+  async function resumeBatch() {
+    if (!selectedBatchId) return;
+    const res = await fetch(`${BASE}/hospitals/bulk/${selectedBatchId}/resume`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      showAlert('statusAlert', data.detail || 'Cannot resume batch', true);
+      return;
+    }
+    showAlert('statusAlert', data.message, false);
+    setTimeout(() => checkStatus(selectedBatchId), 2000);
+  }
+
+  async function resumeFromResult() {
+    const btn = document.getElementById('resumeBtn');
+    const batchId = btn.dataset.batchId;
+    if (!batchId) return;
+
+    const res = await fetch(`${BASE}/hospitals/bulk/${batchId}/resume`, { method: 'POST' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      // 409 means nothing left to retry — hide the button and explain
+      btn.style.display = 'none';
+      const badge = document.getElementById('resultBadge');
+      badge.textContent = data.detail.includes('completed') ? 'completed' : badge.textContent;
+      // Show inline message under the button row
+      const msg = document.createElement('p');
+      msg.style.cssText = 'font-size:0.85rem;color:#555;margin-top:0.5rem';
+      msg.textContent = data.detail || 'Cannot resume batch';
+      btn.parentElement.appendChild(msg);
+      return;
+    }
+
+    // Switch back to live progress view
+    document.getElementById('resultCard').style.display = 'none';
+    document.getElementById('liveCard').style.display = 'block';
+    document.getElementById('liveBadge').textContent = 'processing';
+    document.getElementById('liveBadge').className = 'badge processing';
+    clearLog();
+    logEvent(`Resuming batch — retrying ${data.hospitals_to_retry} failed hospital(s)`, 'ev-started');
+    logEvent(`Skipping ${data.skipped_hospitals} already processed`, 'ev-state');
+    connectLiveWS(batchId);
+  }
+
+  // ── Helpers ──
+  function showAlert(id, msg, isError) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.className = 'alert ' + (isError ? 'error' : 'info');
+    el.style.display = msg ? 'block' : 'none';
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>
