@@ -202,17 +202,6 @@
 
       <div class="alert error" id="uploadAlert"></div>
 
-      <!-- dev only: simulate failures -->
-      <details style="margin-bottom:0.75rem">
-        <summary style="font-size:0.8rem;color:#94a3b8;cursor:pointer;user-select:none">Testing options</summary>
-        <div style="margin-top:0.5rem">
-          <label style="font-size:0.8rem;color:#666;display:block;margin-bottom:0.3rem">
-            Simulate failures on rows (comma-separated, e.g. <code>2,5</code>)
-          </label>
-          <input type="text" id="failRows" placeholder="e.g. 2,5" style="border:1px solid #ddd;border-radius:6px;padding:0.45rem 0.7rem;font-size:0.875rem;width:200px;outline:none" />
-        </div>
-      </details>
-
       <!-- Step indicator (hidden until submit) -->
       <div id="stepIndicator" style="display:none;margin-top:1.25rem">
         <div class="steps">
@@ -385,10 +374,7 @@
     const fd = new FormData();
     fd.append('file', uploadFile);
 
-    const failRows = document.getElementById('failRows').value.trim();
-    const url = failRows
-      ? `${BASE}/hospitals/bulk?simulate_fail_rows=${encodeURIComponent(failRows)}`
-      : `${BASE}/hospitals/bulk`;
+    const url = `${BASE}/hospitals/bulk`;
 
     let batchId;
     try {
@@ -563,7 +549,6 @@
     showAlert('uploadAlert', '', false);
     hideSteps();
     document.getElementById('csvFile').value = '';
-    document.getElementById('failRows').value = '';
   }
 
   // ── Status tab ──
