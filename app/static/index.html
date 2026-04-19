@@ -316,6 +316,12 @@
   const BASE = window.location.origin;
   let uploadFile = null, wsSocket = null;
 
+  async function safeJson(res) {
+    const text = await res.text();
+    try { return JSON.parse(text); }
+    catch { return { detail: text || `HTTP ${res.status}` }; }
+  }
+
   // ── Tabs ──
   function switchTab(btn, name) {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -389,7 +395,7 @@
       // Step 2: submitting (server validates then kicks off batch)
       setStep('submit', 'active');
       const res = await fetch(url, { method: 'POST', body: fd });
-      const data = await res.json();
+      const data = await safeJson(res);
 
       if (!res.ok) {
         setStep('validate', 'error');
@@ -473,7 +479,7 @@
   async function fetchAndRenderResult(batchId, status) {
     try {
       const res = await fetch(`${BASE}/hospitals/bulk/${batchId}/status`);
-      const data = await res.json();
+      const data = await safeJson(res);
       showResults(data);
     } catch {
       // fallback: just show what we know
@@ -566,7 +572,7 @@
   async function loadBatchList() {
     try {
       const res = await fetch(`${BASE}/hospitals/bulk`);
-      const batches = await res.json();
+      const batches = await safeJson(res);
       renderBatchList(batches);
     } catch (e) { /* silently ignore if server not ready */ }
   }
@@ -596,7 +602,7 @@
     showAlert('statusAlert', '', false);
     try {
       const res = await fetch(`${BASE}/hospitals/bulk/${batchId}/status`);
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) { showAlert('statusAlert', data.detail || 'Error', true); return; }
       renderStatusCard(data);
     } catch (e) { showAlert('statusAlert', 'Network error: ' + e.message, true); }
@@ -628,7 +634,7 @@
   async function resumeBatch() {
     if (!selectedBatchId) return;
     const res = await fetch(`${BASE}/hospitals/bulk/${selectedBatchId}/resume`, { method: 'POST' });
-    const data = await res.json();
+    const data = await safeJson(res);
     if (!res.ok) {
       showAlert('statusAlert', data.detail || 'Cannot resume batch', true);
       return;
@@ -643,7 +649,7 @@
     if (!batchId) return;
 
     const res = await fetch(`${BASE}/hospitals/bulk/${batchId}/resume`, { method: 'POST' });
-    const data = await res.json();
+    const data = await safeJson(res);
 
     if (!res.ok) {
       // 409 means nothing left to retry — hide the button and explain
